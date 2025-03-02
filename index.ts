@@ -15,8 +15,7 @@ import { handleLintWorkflowTrigger } from "./lint.js";
 
 let config: any;
 
-// Add this new function for the default comment
-async function postDefaultComment(context: any) {
+async function postDefaultComment(context: any, app: any) {
     const defaultComment = `## 🤖 PRism Bot Analysis Started
     
 Hello! I'm PRism Bot and I'll be analyzing this PR.
@@ -33,65 +32,55 @@ Please wait while I review your changes...
 _This is an automated message. I'll post my analysis results shortly._`;
 
     try {
-        await context.octokit.issues.createComment({
+        app.log.info('Posting default comment...');
+        const response = await context.octokit.issues.createComment({
             ...context.repo(),
             issue_number: context.payload.pull_request.number,
             body: defaultComment
         });
+        app.log.info('Default comment posted successfully:', response.data.url);
+        return response;
     } catch (error) {
-        context.log.error('Failed to post default comment:', error);
+        app.log.error('Failed to post default comment:', error);
+        throw error;
     }
 }
 
 export default async (app: {
     log: { info: (arg0: string, arg1?: any) => void; error: (arg0: string, arg1?: any) => void };
-    on: (arg0: string[], arg1: (context: any) => Promise<void>) => void;
+    on: (arg0: string | string[], arg1: (context: any) => Promise<void>) => void;
 }) => {
+    // Initialize config first
     try {
-        // Get user configuration through CLI
         config = await promptUserConfig();
-        // selectedModel = config.model;
-        app.log.info(`Initialized with API url: ${config.apiEndpoint} for use case: ${config.useCase} and model : ${config.selectedModel}`);
+        if (!config) throw new Error('Configuration not initialized');
+        app.log.info('Bot configuration:', JSON.stringify(config, null, 2));
     } catch (error) {
-        app.log.info("Failed to get user configuration");
+        app.log.error('Configuration error:', error);
     }
 
-    app.log.info("Yay, the app was loaded!");
-
-    const handlePrEvent = async (context: any) => {
+    // Handle PR opened event
+    app.on('pull_request.opened', async (context) => {
+        app.log.info(`New PR opened: #${context.payload.pull_request.number}`);
         try {
-            // Post default comment first thing
-            await postDefaultComment(context);
-
-            const prData = await getAllPrDetails(context, app);
-            app.log.info('PR data collected:', JSON.stringify(prData));
-
-            if (!config || !config.apiEndpoint || !config.selectedModel) {
-                throw new Error('Missing configuration. Please run setup again.');
-            }
-
-            const llmOutput = await handlePrAnalysis(context, prData, config.apiEndpoint, config.selectedModel, app);
-            app.log.info('LLM analysis complete:', JSON.stringify(llmOutput));
-
-            await reviewPR(context, app, llmOutput);
-            
-            // Run additional checks
-            await Promise.all([
-                handleSecurityWorkflowTrigger(context),
-                handleLintWorkflowTrigger(context)
-            ]);
-
+            await postDefaultComment(context, app);
         } catch (error) {
-            app.log.info('Error in handlePrEvent:');
-            await handleError(context, app, error);
+            app.log.error('Error in PR opened handler:', error);
         }
-    };
-
-    // Only post default comment on PR open, not on synchronize
-    app.on(["pull_request.opened", "pull_request.synchronize"], async (context) => {
-        await postDefaultComment(context);
     });
 
-    // Regular processing for both events
-    app.on(["pull_request.opened", "pull_request.synchronize"], handlePrEvent);
+    // Handle PR synchronize event
+    app.on('pull_request.synchronize', async (context) => {
+        app.log.info(`PR synchronized: #${context.payload.pull_request.number}`);
+        try {
+            const prData = await getAllPrDetails(context, app);
+            const llmOutput = await handlePrAnalysis(context, prData, config.apiEndpoint, config.selectedModel, app);
+            await reviewPR(context, app, llmOutput);
+        } catch (error) {
+            app.log.error('Error in PR sync handler:', error);
+            await handleError(context, app, error);
+        }
+    });
+
+    app.log.info('PRism bot initialized successfully');
 };

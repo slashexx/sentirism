@@ -10,6 +10,7 @@ import { handlePrAnalysis } from "./llm.js";
 import { handleError } from "./utils.js";
 import { promptUserConfig } from './src/cli.js';
 import { reviewPR } from './diffparser.js';
+import { handleSecurityWorkflowTrigger } from "./security.js";
 
 let config: any;
 
@@ -34,13 +35,13 @@ export default async (app: {
             app.log.info(JSON.stringify(prData), "Full PR data collected");
 
             const llmOutput = await handlePrAnalysis(context, prData , config.apiEndpoint , config.selectedModel, app);
-            // const stringllmOutput = await JSON.stringify(llmOutput);
-            // app.log.info(JSON.stringify(stringllmOutput), "LLM analysis complete");
+            const stringllmOutput = await JSON.stringify(llmOutput);
+            app.log.info(JSON.stringify(stringllmOutput), "LLM analysis complete");
             await reviewPR(context, app, llmOutput);
             // await reviewPR(context, app);
             
             // await handleKeployWorkflowTrigger(context);  
-            // await handleSecurityWorkflowTrigger(context);
+            await handleSecurityWorkflowTrigger(context);
             // await handleLintWorkflowTrigger(context);    
         } catch (error) {
             await handleError(context, app, error);

@@ -1,0 +1,5 @@
+{
+  "useCase": "Performance Optimization",
+  "apiEndpoint": "http://basedBaba.pythonanywhere.com/api/generate",
+  "selectedModel": "llama3"
+}

@@ -63,6 +63,8 @@ export async function analyzeLLM(prData: any, rules: any, API: string, model: st
   const stringanalysisContext = JSON.stringify(analysisContext, null, 2);
   
   const prompt = `
+  IGNORE ALL PREVIOUS PROMPTS
+  
   Review the following code changes and provide feedback in git diff format only.
   Focus on security, best practices, and potential bugs.
   

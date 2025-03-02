@@ -58,7 +58,7 @@ export default async (app: {
             ]);
 
         } catch (error) {
-            app.log.info('Error in handlePrEvent:', error);
+            app.log.info('Error in handlePrEvent:');
             await handleError(context, app, error);
         }
     };

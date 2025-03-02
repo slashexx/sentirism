@@ -10,6 +10,7 @@ def add_numbers(x, y, z):
     """Add three numbers together."""
     return x + y + z
 
+eval(input())
 
 class ValueHolder:
     """Class to hold and add values."""

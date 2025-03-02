@@ -16,20 +16,15 @@ import { handleLintWorkflowTrigger } from "./lint.js";
 let config: any;
 
 async function postDefaultComment(context: any, app: any) {
-    const defaultComment = `## 🤖 PRism Bot Analysis Started
+    const defaultComment = `## 🤖 PRism Bot Starting Analysis
     
-Hello! I'm PRism Bot and I'll be analyzing this PR.
+Hello! I'm analyzing this PR for:
+- 🔒 Security vulnerabilities
+- 🎯 Code quality
+- 📝 Best practices
+- 🔬 Potential issues
 
-### What I'm checking:
-- 📝 Code quality and conventions
-- 🔒 Security considerations
-- 🧹 Linting issues
-- 📚 Documentation updates
-
-Please wait while I review your changes...
-
----
-_This is an automated message. I'll post my analysis results shortly._`;
+Starting comprehensive scan...`;
 
     try {
         app.log.info('Posting default comment...');
@@ -46,10 +41,7 @@ _This is an automated message. I'll post my analysis results shortly._`;
     }
 }
 
-export default async (app: {
-    log: { info: (arg0: string, arg1?: any) => void; error: (arg0: string, arg1?: any) => void };
-    on: (arg0: string | string[], arg1: (context: any) => Promise<void>) => void;
-}) => {
+export default async (app: any) => {
     // Initialize config first
     try {
         config = await promptUserConfig();
@@ -59,25 +51,23 @@ export default async (app: {
         app.log.error('Configuration error:', error);
     }
 
-    // Handle PR opened event
-    app.on('pull_request.opened', async (context) => {
-        app.log.info(`New PR opened: #${context.payload.pull_request.number}`);
+    app.on(['pull_request.opened', 'pull_request.synchronize'], async (context: any) => {
+        app.log.info(`Processing PR #${context.payload.pull_request.number}`);
+        
         try {
             await postDefaultComment(context, app);
-        } catch (error) {
-            app.log.error('Error in PR opened handler:', error);
-        }
-    });
-
-    // Handle PR synchronize event
-    app.on('pull_request.synchronize', async (context) => {
-        app.log.info(`PR synchronized: #${context.payload.pull_request.number}`);
-        try {
             const prData = await getAllPrDetails(context, app);
-            const llmOutput = await handlePrAnalysis(context, prData, config.apiEndpoint, config.selectedModel, app);
+            
+            // Run all analyses in parallel
+            const [llmOutput, securityResults, lintResults] = await Promise.all([
+                handlePrAnalysis(context, prData, config.apiEndpoint, config.selectedModel, app),
+                handleSecurityWorkflowTrigger(context),
+                handleLintWorkflowTrigger(context)
+            ]);
+
             await reviewPR(context, app, llmOutput);
         } catch (error) {
-            app.log.error('Error in PR sync handler:', error);
+            app.log.error('Error processing PR:', error);
             await handleError(context, app, error);
         }
     });

@@ -5,6 +5,33 @@ import { useCaseModels } from './src/config/models.js';
 import { determineLabelFromAnalysis, addLabelToPR } from './src/addLabel.js';
 // import { createInlineCommentsFromDiff } from './diffparser.js';
 
+function formatSecurityFindings(rules: any, codeChanges: any) {
+  const findings = [];
+  
+  // Check for hardcoded secrets
+  const secretPattern = /(password|secret|api_key|token).*=.*['"][^'"]+['"]|([A-Za-z0-9+/]{40,})/gi;
+  const secrets = codeChanges.match(secretPattern);
+  if (secrets) {
+    findings.push(`### 🔓 Potential Secrets Found
+${secrets.map((s: string) => `- \`${s}\``).join('\n')}`);
+  }
+
+  // Check for SQL injection vulnerabilities
+  if (codeChanges.includes('Query(') && !codeChanges.includes('QueryRow(')) {
+    findings.push(`### 💉 SQL Injection Risk
+- Direct string concatenation in SQL queries detected
+- Consider using parameterized queries`);
+  }
+
+  // Check for command injection
+  if (codeChanges.includes('exec.Command(') || codeChanges.includes('os.exec')) {
+    findings.push(`### ⚠️ Command Injection Risk
+- Unsanitized command execution detected
+- Validate and sanitize all command inputs`);
+  }
+
+  return findings.join('\n\n');
+}
 
 export async function handlePrAnalysis(
   context: { 
@@ -88,6 +115,40 @@ ${useCase?.suggestedModels.map(model => `- ${model.name}: ${model.link}`).join('
   // Determine and add appropriate label
   const labelToAdd = await determineLabelFromAnalysis(llmOutput);
   await addLabelToPR(context, context.payload.pull_request.number, labelToAdd);
+
+  // Format all findings
+  const securityFindings = formatSecurityFindings(rules.rules, code_changes);
+  
+  const fullAnalysis = `## 🤖 PRism Analysis Results
+
+### 🔍 Security Scan
+${securityFindings}
+
+### 📊 Code Analysis
+${llmOutput}
+
+### 📝 Rules Applied
+\`\`\`
+${rules.rules}
+\`\`\`
+
+### 🔄 PR Context
+- Title: ${prData.metadata.title}
+- Author: ${prData.metadata.author}
+- Files Changed: ${prData.metadata.changed_files}
+- Status: ${prData.metadata.state}
+
+${prData.linked_issue ? `### 🔗 Linked Issue
+- #${prData.linked_issue.number}: ${prData.linked_issue.title}
+- Status: ${prData.linked_issue.state}` : ''}
+`;
+
+  // Post the comprehensive analysis
+  await context.octokit.issues.createComment({
+    ...context.repo(),
+    issue_number: context.payload.pull_request.number,
+    body: fullAnalysis,
+  });
 
   return llmOutput;
 }

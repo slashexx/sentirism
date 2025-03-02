@@ -1,0 +1,62 @@
+name: SBOM and Vulnerability Scan
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  security-scan:
+    permissions:
+      pull-requests: write
+      issues: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Generate SBOM with Syft
+        run: syft . -o cyclonedx-json > sbom.json
+
+      - name: Upload SBOM as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: sbom
+          path: sbom.json
+
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Run Vulnerability Scan with Grype
+        run: grype sbom:sbom.json -o table
+
+      - name: Fail on Critical Vulnerabilities
+        run: |
+          if grype sbom:sbom.json -o json | jq '.matches[] | select(.vulnerability.severity=="Critical")'; then
+            echo "Critical vulnerabilities found!"
+            exit 1
+          else
+            echo "No critical vulnerabilities found."
+          fi
+
+      - name: Comment on Pull Request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const commentBody = "Vulnerability scan completed. Check logs for details."
+            console.log("Commenting on PR with message:", commentBody)
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: commentBody
+            })

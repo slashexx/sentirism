@@ -11,6 +11,12 @@ def add_numbers(x, y, z):
     return x + y + z
 
 eval(input())
+eval(input())
+eval(input())
+eval(input())
+eval(input())
+eval(input())
+eval(input())
 
 class ValueHolder:
     """Class to hold and add values."""

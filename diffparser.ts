@@ -47,7 +47,7 @@ export async function reviewPR(context: any, app: any, llmOutput: any) {
     await context.octokit.issues.createComment({
       ...context.repo(),
       issue_number: context.payload.pull_request.number,
-      body: '❌ Error during PR review: ' + error.message
+      body: '❌ Error during PR review: ' 
     });
   }
 }

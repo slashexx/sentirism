@@ -39,16 +39,22 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
-      - name: Run Vulnerability Scan with Grype
-        run: grype sbom:sbom.json -o table
-
-      - name: Fail on Critical Vulnerabilities
+      - name: Generate Vulnerability Report
+        id: vuln-report
         run: |
-          if grype sbom:sbom.json -o json | jq '.matches[] | select(.vulnerability.severity=="Critical")'; then
-            echo "Critical vulnerabilities found!"
-            exit 1
+          REPORT=$(grype sbom:sbom.json -o table)
+          echo "SCAN_REPORT<<EOF" >> $GITHUB_ENV
+          echo "$REPORT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+          CRIT_VULNS=$(grype sbom:sbom.json -o json | jq -r '.matches[] | select(.vulnerability.severity=="Critical") | "- \(.vulnerability.id): \(.vulnerability.description)"')
+          if [ ! -z "$CRIT_VULNS" ]; then
+            echo "HAS_CRITICAL=true" >> $GITHUB_ENV
+            echo "CRITICAL_VULNS<<EOF" >> $GITHUB_ENV
+            echo "$CRIT_VULNS" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
           else
-            echo "No critical vulnerabilities found."
+            echo "HAS_CRITICAL=false" >> $GITHUB_ENV
           fi
 
       - name: Comment on Pull Request
@@ -56,11 +62,28 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const commentBody = "Vulnerability scan completed. Check logs for details."
-            console.log("Commenting on PR with message:", commentBody)
+            const hasCritical = process.env.HAS_CRITICAL === 'true';
+            let commentBody = '## Vulnerability Scan Results\n\n';
+            
+            if (hasCritical) {
+              commentBody += '⚠️ **CRITICAL VULNERABILITIES FOUND!**\n\n';
+              commentBody += '### Critical Vulnerabilities:\n';
+              commentBody += process.env.CRITICAL_VULNS + '\n\n';
+            } else {
+              commentBody += '✅ No critical vulnerabilities found\n\n';
+            }
+            
+            commentBody += '### Full Scan Report:\n```\n';
+            commentBody += process.env.SCAN_REPORT;
+            commentBody += '\n```';
+            
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: commentBody
-            })
+            });
+
+      - name: Fail on Critical Vulnerabilities
+        if: env.HAS_CRITICAL == 'true'
+        run: exit 1

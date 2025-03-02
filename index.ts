@@ -15,8 +15,37 @@ import { handleLintWorkflowTrigger } from "./lint.js";
 
 let config: any;
 
+// Add this new function for the default comment
+async function postDefaultComment(context: any) {
+    const defaultComment = `## 🤖 PRism Bot Analysis Started
+    
+Hello! I'm PRism Bot and I'll be analyzing this PR.
+
+### What I'm checking:
+- 📝 Code quality and conventions
+- 🔒 Security considerations
+- 🧹 Linting issues
+- 📚 Documentation updates
+
+Please wait while I review your changes...
+
+---
+_This is an automated message. I'll post my analysis results shortly._`;
+
+    try {
+        await context.octokit.issues.createComment({
+            ...context.repo(),
+            issue_number: context.payload.pull_request.number,
+            body: defaultComment
+        });
+    } catch (error) {
+        context.log.error('Failed to post default comment:', error);
+    }
+}
+
 export default async (app: {
     log: { info: (arg0: string, arg1?: string) => void, error: (arg0: string, arg1?: string) => void };
+
     on: (arg0: string[], arg1: (context: any) => Promise<void>) => void;
 }) => {
     try {
@@ -76,5 +105,11 @@ export default async (app: {
         }
     };
 
+    // Only post default comment on PR open, not on synchronize
+    app.on(["pull_request.opened", "pull_request.synchronize"], async (context) => {
+        await postDefaultComment(context);
+    });
+
+    // Regular processing for both events
     app.on(["pull_request.opened", "pull_request.synchronize"], handlePrEvent);
 };

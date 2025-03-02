@@ -32,19 +32,33 @@ export default async (app: {
 
     const handlePrEvent = async (context: any) => {
         try {
-            const prData = await getAllPrDetails(context, app);
-            app.log.info(JSON.stringify(prData), "Full PR data collected");
+            // Log the start of processing
+            await context.octokit.issues.createComment({
+                ...context.repo(),
+                issue_number: context.payload.pull_request.number,
+                body: '🚀 Starting PR analysis...'
+            });
 
-            const llmOutput = await handlePrAnalysis(context, prData , config.apiEndpoint , config.selectedModel, app);
-            const stringllmOutput = await JSON.stringify(llmOutput);
-            app.log.info(JSON.stringify(stringllmOutput), "LLM analysis complete");
+            const prData = await getAllPrDetails(context, app);
+            app.log.info('PR data collected:', JSON.stringify(prData));
+
+            if (!config || !config.apiEndpoint || !config.selectedModel) {
+                throw new Error('Missing configuration. Please run setup again.');
+            }
+
+            const llmOutput = await handlePrAnalysis(context, prData, config.apiEndpoint, config.selectedModel, app);
+            app.log.info('LLM analysis complete:', JSON.stringify(llmOutput));
+
             await reviewPR(context, app, llmOutput);
-            // await reviewPR(context, app);
             
-            // await handleKeployWorkflowTrigger(context);  
-            await handleSecurityWorkflowTrigger(context);
-            await handleLintWorkflowTrigger(context);    
+            // Run additional checks
+            await Promise.all([
+                handleSecurityWorkflowTrigger(context),
+                handleLintWorkflowTrigger(context)
+            ]);
+
         } catch (error) {
+            app.log.error('Error in handlePrEvent:', error);
             await handleError(context, app, error);
         }
     };

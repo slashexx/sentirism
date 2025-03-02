@@ -189,21 +189,11 @@ export async function analyzeLLM(prData: any, rules: any, API: string, model: st
   ${stringanalysisContext}
 
   Given the above repository context and PR changes, please analyze the changes and:
-  1. Verify if the changes align with the project's structure and purpose as described in the README
+  1. Verify if the changes align with the project's structure and purpose as described in the YARA rules
   2. Check if the changes follow the project's conventions visible in the folder structure
   3. Suggest improvements or identify potential issues
 
   Suggest the changes in the format of git diff.
-  
-  You must follow the following pattern for suggestions:
-  
-  Suggested change:
-  diff --git a/path/to/file b/path/to/file
-  index abc1234..def5678 100644
-  --- a/path/to/file
-  +++ b/path/to/file
-  @@ -line,count +line,count @@
-  actual diff content
 
   Here is some context about the PR made: ${stringanalysisContext}.
 
@@ -211,21 +201,6 @@ export async function analyzeLLM(prData: any, rules: any, API: string, model: st
   Please check the codebase diff for the following rules:
   ${rules}
 
-  ## GitHub PR Title
-
-\`$title\` 
-
-## Description
-
-\`\`\`
-$description
-\`\`\`
-
-## Summary of changes
-
-\`\`\`
-$short_summary
-\`\`\`
 
 ## IMPORTANT Instructions
 

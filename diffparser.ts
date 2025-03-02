@@ -8,48 +8,48 @@ async function parseGitDiffFromLLMOutput(llmOutput: any) {
 }
 
 export async function reviewPR(context: any, app: any, llmOutput: any) {
-  try {
-    // First, post a processing status
-    await context.octokit.issues.createComment({
-      ...context.repo(),
-      issue_number: context.payload.pull_request.number,
-      body: '🔍 Processing PR review...'
-    });
-
-    const ifLGTM = llmOutput && llmOutput.includes('LGTM');
-    if (ifLGTM) {
-      await context.octokit.issues.createComment({
-        ...context.repo(),
-        issue_number: context.payload.pull_request.number,
-        body: '✅ LGTM: LLM analysis is successful'
-      });
-      return;
-    }
-
     if (!llmOutput) {
-      throw new Error('No LLM output received');
+        app.log.error('No LLM output received');
+        await context.octokit.issues.createComment({
+            ...context.repo(),
+            issue_number: context.payload.pull_request.number,
+            body: '❌ Error: No analysis output received'
+        });
+        return;
     }
 
-    const gitDiff = await parseGitDiffFromLLMOutput(llmOutput);
-    if (gitDiff) {
-      await createInlineCommentsFromDiff(gitDiff, context, app);
+    try {
+        // Always post the LLM output first
+        await context.octokit.issues.createComment({
+            ...context.repo(),
+            issue_number: context.payload.pull_request.number,
+            body: '## Analysis Results\n\n' + llmOutput
+        });
+
+        const ifLGTM = llmOutput.includes('LGTM');
+        if (ifLGTM) {
+            await context.octokit.issues.createComment({
+                ...context.repo(),
+                issue_number: context.payload.pull_request.number,
+                body: '✅ LGTM: Code looks good!'
+            });
+            return;
+        }
+
+        // Try to parse and create diff comments
+        const gitDiff = await parseGitDiffFromLLMOutput(llmOutput);
+        if (gitDiff) {
+            await createInlineCommentsFromDiff(gitDiff, context, app);
+        }
+
+    } catch (error: any) {
+        app.log.error('Error in reviewPR:', error);
+        await context.octokit.issues.createComment({
+            ...context.repo(),
+            issue_number: context.payload.pull_request.number,
+            body: `❌ Error during review: ${error.message}`
+        });
     }
-
-    // Post the full LLM analysis
-    await context.octokit.issues.createComment({
-      ...context.repo(),
-      issue_number: context.payload.pull_request.number,
-      body: '## LLM Analysis Results\n\n' + llmOutput
-    });
-
-  } catch (error) {
-    app.log.error('Error in reviewPR:', error);
-    await context.octokit.issues.createComment({
-      ...context.repo(),
-      issue_number: context.payload.pull_request.number,
-      body: '❌ Error during PR review: ' 
-    });
-  }
 }
 
 export async function createInlineCommentsFromDiff(diff: string, context: any, app: any) {

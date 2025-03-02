@@ -16,7 +16,7 @@ import { handleLintWorkflowTrigger } from "./lint.js";
 let config: any;
 
 export default async (app: {
-    log: { info: (arg0: string, arg1?: string) => void };
+    log: { info: (arg0: string, arg1?: string) => void, error: (arg0: string, arg1?: string) => void };
     on: (arg0: string[], arg1: (context: any) => Promise<void>) => void;
 }) => {
     try {
@@ -32,34 +32,47 @@ export default async (app: {
 
     const handlePrEvent = async (context: any) => {
         try {
-            // Log the start of processing
+            // First comment to confirm the bot is working
             await context.octokit.issues.createComment({
                 ...context.repo(),
                 issue_number: context.payload.pull_request.number,
-                body: '🚀 Starting PR analysis...'
-            });
+                body: '🤖 PRism bot is analyzing your PR...'
+            }).catch(error => app.log.error('Failed to post initial comment:', error));
 
             const prData = await getAllPrDetails(context, app);
-            app.log.info('PR data collected:', JSON.stringify(prData));
+            if (!prData) {
+                throw new Error('Failed to get PR details');
+            }
 
             if (!config || !config.apiEndpoint || !config.selectedModel) {
                 throw new Error('Missing configuration. Please run setup again.');
             }
 
+            // Add debug logging
+            app.log.info('Config:', JSON.stringify(config));
+            app.log.info('PR Data:', JSON.stringify(prData));
+
             const llmOutput = await handlePrAnalysis(context, prData, config.apiEndpoint, config.selectedModel, app);
-            app.log.info('LLM analysis complete:', JSON.stringify(llmOutput));
+            if (!llmOutput) {
+                throw new Error('No output from LLM analysis');
+            }
 
             await reviewPR(context, app, llmOutput);
-            
+
             // Run additional checks
             await Promise.all([
                 handleSecurityWorkflowTrigger(context),
                 handleLintWorkflowTrigger(context)
             ]);
 
-        } catch (error) {
-            app.log.info('Error in handlePrEvent:');
-            await handleError(context, app, error);
+        } catch (error: any) {
+            app.log.error('Error in handlePrEvent:', error);
+            // Ensure error message is posted to PR
+            await context.octokit.issues.createComment({
+                ...context.repo(),
+                issue_number: context.payload.pull_request.number,
+                body: `❌ Error processing PR: ${error.message}`
+            }).catch(e => app.log.error('Failed to post error comment:', e));
         }
     };
 

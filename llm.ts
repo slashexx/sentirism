@@ -248,14 +248,24 @@ LGTM!
 
 
   // Call the API with the analysis context
-  var response = await axios.post(API, {
-    model: model,
-    prompt
-  });
+  try {
+    const response = await axios.post(API, {
+        model: model,
+        prompt
+    });
 
-  // const stringResp = await JSON.stringify(response.data, null, 2);
-  // app.log.info('API Response:',stringResp);
-  return response.data.response;
+    if (!response.data || !response.data.response) {
+        throw new Error('Invalid response from API');
+    }
+
+    // Log the response for debugging
+    app.log.info('API Response received:', JSON.stringify(response.data));
+
+    return response.data.response;
+  } catch (error: any) {
+    app.log.error('API call failed:', error);
+    throw new Error(`API call failed: ${error.message}`);
+  }
   
 }
 
